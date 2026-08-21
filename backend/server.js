@@ -6,7 +6,7 @@ const apiRoutes = require('./routes/api');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/coding-test-platform';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://azartechnet_db_user:admin@cluster0.musk1ed.mongodb.net/coding-test-platform';
 
 // Middleware
 app.use(cors({
