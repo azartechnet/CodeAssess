@@ -1,0 +1,20 @@
+{
+  "name": "coding-test-platform",
+  "version": "1.0.0",
+  "description": "Code assess platform with admin dashboard",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "seed-admin": "node seedAdmin.js",
+    "migrate-teacher": "node backend/scripts/migrate_teacher_to_trainer.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.6.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5"
+  }
+}
