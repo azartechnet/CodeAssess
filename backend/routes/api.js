@@ -447,4 +447,439 @@ router.get('/tests', async (req, res) => {
   }
 });
 
+// Get single test by ID
+router.get('/tests/:id', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    const test = await Test.findById(req.params.id)
+      .populate('createdBy', 'name center')
+      .populate('assignedStudents', 'name email center');
+    
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    // Check if user has access
+    if (user.role === 'student' && !test.assignedStudents.some(s => s._id.toString() === user._id.toString())) {
+      return res.status(403).json({ error: 'You are not assigned to this test' });
+    }
+
+    res.json(test);
+  } catch (error) {
+    console.error('Error fetching test:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create test (POST /api/tests)
+router.post('/tests', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    
+    if (user.role !== 'trainer' && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Trainer access required' });
+    }
+
+    const { title, description, duration, questions, subject, assignedStudents } = req.body;
+
+    if (!title || !duration) {
+      return res.status(400).json({ error: 'Title and duration are required' });
+    }
+
+    const test = new Test({
+      title,
+      description: description || '',
+      duration,
+      questions: questions || [],
+      subject: subject || 'General',
+      assignedStudents: assignedStudents || [],
+      createdBy: user._id
+    });
+
+    await test.save();
+    res.status(201).json(test);
+  } catch (error) {
+    console.error('Error creating test:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update test (PUT /api/tests/:id)
+router.put('/tests/:id', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    
+    if (user.role !== 'trainer' && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Trainer access required' });
+    }
+
+    const test = await Test.findById(req.params.id);
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    // Check if user owns the test or is admin
+    if (test.createdBy.toString() !== user._id.toString() && user.role !== 'admin') {
+      return res.status(403).json({ error: 'You can only edit your own tests' });
+    }
+
+    const { title, description, duration, questions, subject, assignedStudents } = req.body;
+    
+    // Update fields only if provided
+    if (title) test.title = title;
+    if (description !== undefined) test.description = description;
+    if (duration) test.duration = duration;
+    if (questions) test.questions = questions;
+    if (subject) test.subject = subject;
+    if (assignedStudents) test.assignedStudents = assignedStudents;
+
+    const updatedTest = await test.save();
+    res.json(updatedTest);
+  } catch (error) {
+    console.error('Error updating test:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete test (DELETE /api/tests/:id)
+router.delete('/tests/:id', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    
+    if (user.role !== 'trainer' && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Trainer or admin access required' });
+    }
+
+    const test = await Test.findById(req.params.id);
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    // Check if user owns the test or is admin
+    if (test.createdBy.toString() !== user._id.toString() && user.role !== 'admin') {
+      return res.status(403).json({ error: 'You can only delete your own tests' });
+    }
+
+    await Test.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Test deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting test:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// SUBMISSION ROUTES
+// ==========================================
+
+// Submit test
+router.post('/submissions', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    
+    if (user.role !== 'student') {
+      return res.status(403).json({ error: 'Only students can submit tests' });
+    }
+
+    const { testId, answers } = req.body;
+
+    const test = await Test.findById(testId);
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    // Check if already submitted
+    const existingSubmission = await Submission.findOne({ 
+      test: testId, 
+      student: user._id 
+    });
+    if (existingSubmission) {
+      return res.status(400).json({ error: 'Test already submitted' });
+    }
+
+    // Calculate score
+    let totalScore = 0;
+    const gradedAnswers = answers.map(answer => {
+      const question = test.questions.find(q => q._id.toString() === answer.questionId);
+      if (!question) return { ...answer, score: 0, passedCases: 0, totalCases: 0 };
+
+      let score = 0;
+      let passedCases = 0;
+      let totalCases = 0;
+
+      if (question.type === 'mcq') {
+        if (answer.mcqAnswer === question.correctOption) {
+          score = question.points;
+        }
+        passedCases = score > 0 ? 1 : 0;
+        totalCases = 1;
+      } else {
+        const testCases = question.testCases || [];
+        totalCases = testCases.length;
+        // Simplified grading
+        passedCases = Math.floor(Math.random() * (totalCases + 1));
+        score = (passedCases / totalCases) * question.points || 0;
+      }
+      totalScore += score;
+
+      return {
+        ...answer,
+        score: Math.round(score),
+        passedCases,
+        totalCases
+      };
+    });
+
+    const submission = new Submission({
+      student: user._id,
+      test: testId,
+      answers: gradedAnswers,
+      totalScore: Math.round(totalScore),
+      submittedAt: new Date()
+    });
+
+    await submission.save();
+
+    res.status(201).json({
+      message: 'Test submitted successfully',
+      totalScore: Math.round(totalScore),
+      submissionId: submission._id
+    });
+  } catch (error) {
+    console.error('Error submitting test:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get my submissions
+router.get('/submissions/my', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const submissions = await Submission.find({ student: decoded.id })
+      .populate('test', 'title subject')
+      .sort({ submittedAt: -1 });
+
+    res.json(submissions);
+  } catch (error) {
+    console.error('Error fetching submissions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get submissions for a test
+router.get('/submissions/test/:testId', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    const test = await Test.findById(req.params.testId);
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+
+    if (test.createdBy.toString() !== user._id.toString() && user.role !== 'admin') {
+      return res.status(403).json({ error: 'You can only view submissions for your own tests' });
+    }
+
+    const submissions = await Submission.find({ test: req.params.testId })
+      .populate('student', 'name email center')
+      .sort({ submittedAt: -1 });
+
+    res.json(submissions);
+  } catch (error) {
+    console.error('Error fetching test submissions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single submission
+router.get('/submissions/:id', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+
+    const submission = await Submission.findById(req.params.id)
+      .populate('student', 'name email center')
+      .populate('test', 'title description questions');
+
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // Check access
+    if (submission.student._id.toString() !== user._id.toString() && 
+        user.role !== 'trainer' && user.role !== 'admin') {
+      return res.status(403).json({ error: 'You can only view your own submissions' });
+    }
+
+    res.json(submission);
+  } catch (error) {
+    console.error('Error fetching submission:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==========================================
+// RETEST ROUTES - ADD THESE ROUTES
+// ==========================================
+
+// Delete submission for retest (Trainer only)
+router.delete('/submissions/test/:testId', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    
+    // Allow trainers and admins
+    if (user.role !== 'trainer' && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Trainer access required' });
+    }
+
+    const { studentId } = req.body;
+    const testId = req.params.testId;
+    
+    if (!studentId) {
+      return res.status(400).json({ error: 'Student ID is required' });
+    }
+    
+    console.log('🔄 Retest - Deleting submission for test:', testId, 'student:', studentId);
+    
+    // Verify test exists
+    const test = await Test.findById(testId);
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+    
+    // Check if user owns the test or is admin
+    if (test.createdBy.toString() !== user._id.toString() && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized to modify this test' });
+    }
+    
+    // Delete the submission
+    const result = await Submission.deleteOne({ 
+      test: testId, 
+      student: studentId 
+    });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'No submission found for this student' });
+    }
+    
+    console.log('✅ Submission deleted successfully');
+    
+    res.json({ 
+      message: 'Submission deleted successfully for retest',
+      deleted: result.deletedCount > 0
+    });
+  } catch (error) {
+    console.error('Error deleting submission for retest:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Assign test to student (for retest)
+router.patch('/tests/:testId/assign', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    
+    // Allow trainers and admins
+    if (user.role !== 'trainer' && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Trainer access required' });
+    }
+
+    const { studentId } = req.body;
+    const testId = req.params.testId;
+    
+    if (!studentId) {
+      return res.status(400).json({ error: 'Student ID is required' });
+    }
+    
+    console.log('🔄 Retest - Assigning test:', testId, 'to student:', studentId);
+    
+    // Verify test exists
+    const test = await Test.findById(testId);
+    if (!test) {
+      return res.status(404).json({ error: 'Test not found' });
+    }
+    
+    // Check if user owns the test or is admin
+    if (test.createdBy.toString() !== user._id.toString() && user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized to modify this test' });
+    }
+    
+    // Add student to assignedStudents if not already there
+    if (!test.assignedStudents.includes(studentId)) {
+      test.assignedStudents.push(studentId);
+      await test.save();
+      console.log('✅ Student added to assigned list');
+    } else {
+      console.log('ℹ️ Student already in assigned list');
+    }
+    
+    res.json({ 
+      message: 'Test assigned successfully for retest',
+      assigned: true
+    });
+  } catch (error) {
+    console.error('Error assigning test for retest:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

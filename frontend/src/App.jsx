@@ -466,6 +466,46 @@ export default function App() {
   }, [apiRequest, tests]);
 
   // ==========================================
+  // RETEST FUNCTION - Assign test to student again
+  // ==========================================
+  const retestStudent = useCallback(async (testId, studentId) => {
+    if (!confirm('Are you sure you want to assign this test to this student again? They will be able to retake it.')) {
+      return;
+    }
+
+    try {
+      console.log('🔄 Starting retest process...');
+      console.log('📤 Test ID:', testId);
+      console.log('📤 Student ID:', studentId);
+      
+      // First, delete the student's previous submission for this test
+      const deleteResult = await apiRequest(`/submissions/test/${testId}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ studentId })
+      });
+      
+      console.log('📥 Delete result:', deleteResult);
+
+      // Then, re-assign the test to the student
+      const assignResult = await apiRequest(`/tests/${testId}/assign`, {
+        method: 'PATCH',
+        body: JSON.stringify({ studentId })
+      });
+      
+      console.log('📥 Assign result:', assignResult);
+
+      alert('Test has been reassigned to the student. They can now retake it.');
+      
+      // Refresh data
+      await loadDashboardData();
+      await viewSubmissions(testId);
+    } catch (error) {
+      console.error('❌ Retest error:', error);
+      alert('Error assigning retest: ' + error.message);
+    }
+  }, [apiRequest, loadDashboardData, viewSubmissions]);
+
+  // ==========================================
   // QUESTION FORM FUNCTIONS
   // ==========================================
   const addQuestionToForm = useCallback((type) => {
@@ -886,6 +926,7 @@ export default function App() {
           setViewingTestSubmissions={setViewingTestSubmissions}
           setIsCreatingTest={setIsCreatingTest}
           openSubmissionDetails={openSubmissionDetails}
+          retestStudent={retestStudent}
           addQuestionToForm={addQuestionToForm}
           removeQuestionFromForm={removeQuestionFromForm}
           updateQuestionForm={updateQuestionForm}
@@ -1433,7 +1474,7 @@ function StudentDashboard({ tests, submissions, startTest, openSubmissionDetails
 }
 
 // ==========================================
-// TRAINER DASHBOARD
+// TRAINER DASHBOARD - UPDATED WITH RETEST
 // ==========================================
 function TrainerDashboard({
   tests,
@@ -1452,6 +1493,7 @@ function TrainerDashboard({
   setViewingTestSubmissions,
   setIsCreatingTest,
   openSubmissionDetails,
+  retestStudent,
   addQuestionToForm,
   removeQuestionFromForm,
   updateQuestionForm,
@@ -1485,6 +1527,7 @@ function TrainerDashboard({
         selectedTestSubmissions={selectedTestSubmissions}
         setViewingTestSubmissions={setViewingTestSubmissions}
         openSubmissionDetails={openSubmissionDetails}
+        retestStudent={retestStudent}
       />
     );
   }
@@ -1541,7 +1584,96 @@ function TrainerDashboard({
 }
 
 // ==========================================
-// TEST CREATION FORM - UPDATED WITH DURATION CONTROL
+// TEST SUBMISSIONS VIEW - UPDATED WITH RETEST
+// ==========================================
+function TestSubmissionsView({
+  viewingTestSubmissions,
+  selectedTestSubmissions,
+  setViewingTestSubmissions,
+  openSubmissionDetails,
+  retestStudent
+}) {
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <button className="btn btn-secondary" onClick={() => setViewingTestSubmissions(null)} style={{ padding: '6px 12px', fontSize: '0.85rem', marginBottom: '8px' }}>
+            &larr; Back to Tests
+          </button>
+          <h2 style={{ fontSize: '1.6rem' }}>Results for "{viewingTestSubmissions.title}"</h2>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            {selectedTestSubmissions.length} submission{selectedTestSubmissions.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className="btn btn-primary"
+            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+            onClick={() => {
+              if (confirm('Assign this test as a retest to ALL students who have completed it?')) {
+                selectedTestSubmissions.forEach(sub => {
+                  retestStudent(viewingTestSubmissions._id, sub.student._id);
+                });
+              }
+            }}
+          >
+            🔄 Retest All
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Student Submissions</h3>
+        {selectedTestSubmissions.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
+            No student has submitted answers for this test yet.
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                <th style={{ padding: '12px' }}>Student Name</th>
+                <th style={{ padding: '12px' }}>Email Address</th>
+                <th style={{ padding: '12px' }}>Submitted Date</th>
+                <th style={{ padding: '12px' }}>Total Score</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {selectedTestSubmissions.map(sub => (
+                <tr key={sub._id} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
+                  <td style={{ padding: '12px', fontWeight: '600' }}>{sub.student?.name}</td>
+                  <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{sub.student?.email}</td>
+                  <td style={{ padding: '12px' }}>{new Date(sub.submittedAt).toLocaleString()}</td>
+                  <td style={{ padding: '12px', color: 'var(--success)', fontWeight: '700' }}>{sub.totalScore} Pts</td>
+                  <td style={{ padding: '12px', textAlign: 'right' }}>
+                    <button 
+                      className="btn btn-secondary" 
+                      onClick={() => openSubmissionDetails(sub._id)} 
+                      style={{ padding: '4px 10px', fontSize: '0.8rem', marginRight: '4px' }}
+                    >
+                      Review
+                    </button>
+                    <button 
+                      className="btn btn-warning" 
+                      onClick={() => retestStudent(viewingTestSubmissions._id, sub.student._id)}
+                      style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                    >
+                      🔄 Retest
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// TEST CREATION FORM
 // ==========================================
 function TestCreationForm({
   testForm,
@@ -1598,13 +1730,11 @@ function TestCreationForm({
     return center;
   };
 
-  // Handle duration change
   const handleDurationChange = (value) => {
     const duration = parseInt(value) || 1;
     setTestForm(prev => ({ ...prev, duration }));
   };
 
-  // Preset duration buttons
   const durationPresets = [15, 30, 45, 60, 90, 120];
 
   return (
@@ -1649,9 +1779,6 @@ function TestCreationForm({
           />
         </div>
 
-        {/* ========================================== */}
-        {/* DURATION INPUT - UPDATED */}
-        {/* ========================================== */}
         <div className="input-group">
           <label className="input-label">
             Duration (Minutes)
@@ -1665,7 +1792,6 @@ function TestCreationForm({
             </span>
           </label>
           
-          {/* Preset Buttons */}
           <div style={{ 
             display: 'flex', 
             gap: '8px', 
@@ -1689,7 +1815,6 @@ function TestCreationForm({
             ))}
           </div>
 
-          {/* Custom Duration Input with Slider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <input
               type="range"
@@ -1722,7 +1847,6 @@ function TestCreationForm({
             <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>min</span>
           </div>
           
-          {/* Duration Info */}
           <div style={{ 
             marginTop: '6px',
             fontSize: '0.75rem',
@@ -1735,7 +1859,6 @@ function TestCreationForm({
           </div>
         </div>
 
-        {/* Assign to Students */}
         <div className="input-group">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <label className="input-label" style={{ margin: 0 }}>
@@ -2134,65 +2257,6 @@ function TestCreationForm({
           </button>
         </div>
       </form>
-    </div>
-  );
-}
-
-// ==========================================
-// TEST SUBMISSIONS VIEW
-// ==========================================
-function TestSubmissionsView({
-  viewingTestSubmissions,
-  selectedTestSubmissions,
-  setViewingTestSubmissions,
-  openSubmissionDetails
-}) {
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div>
-          <button className="btn btn-secondary" onClick={() => setViewingTestSubmissions(null)} style={{ padding: '6px 12px', fontSize: '0.85rem', marginBottom: '8px' }}>
-            &larr; Back to Tests
-          </button>
-          <h2 style={{ fontSize: '1.6rem' }}>Results for "{viewingTestSubmissions.title}"</h2>
-        </div>
-      </div>
-
-      <div className="card">
-        <h3 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Student Submissions ({selectedTestSubmissions.length})</h3>
-        {selectedTestSubmissions.length === 0 ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
-            No student has submitted answers for this test yet.
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                <th style={{ padding: '12px' }}>Student Name</th>
-                <th style={{ padding: '12px' }}>Email Address</th>
-                <th style={{ padding: '12px' }}>Submitted Date</th>
-                <th style={{ padding: '12px' }}>Total Score</th>
-                <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedTestSubmissions.map(sub => (
-                <tr key={sub._id} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
-                  <td style={{ padding: '12px', fontWeight: '600' }}>{sub.student?.name}</td>
-                  <td style={{ padding: '12px', color: 'var(--text-muted)' }}>{sub.student?.email}</td>
-                  <td style={{ padding: '12px' }}>{new Date(sub.submittedAt).toLocaleString()}</td>
-                  <td style={{ padding: '12px', color: 'var(--success)', fontWeight: '700' }}>{sub.totalScore} Pts</td>
-                  <td style={{ padding: '12px', textAlign: 'right' }}>
-                    <button className="btn btn-secondary" onClick={() => openSubmissionDetails(sub._id)} style={{ padding: '4px 10px', fontSize: '0.8rem' }}>
-                      Review Answers
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
     </div>
   );
 }
