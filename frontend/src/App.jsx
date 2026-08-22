@@ -210,23 +210,20 @@ export default function App() {
   };
 
   // ==========================================
-  // DATA LOADING FUNCTIONS
+  // DATA LOADING FUNCTIONS - FIXED
   // ==========================================
   const loadDashboardData = useCallback(async () => {
     if (!token || !user) return;
 
     try {
-      // Load tests
       const testsData = await apiRequest('/tests');
       setTests(testsData);
 
-      // Load student submissions
       if (user.role === 'student') {
         const subData = await apiRequest('/submissions/my');
         setSubmissions(subData);
       }
 
-      // Load students list for trainers
       if (user.role === 'trainer') {
         const studentsData = await apiRequest('/students');
         setStudentsList(studentsData);
@@ -236,10 +233,13 @@ export default function App() {
     }
   }, [token, user, apiRequest]);
 
+  // FIXED: Using isActive instead of isApproved
   const loadAdminData = useCallback(async () => {
     if (!token) return;
 
     try {
+      console.log('📊 Loading admin data...');
+      
       const [overview, users, pending, testsData, submissionsData] = await Promise.all([
         apiRequest('/admin/overview'),
         apiRequest('/admin/users'),
@@ -248,11 +248,32 @@ export default function App() {
         apiRequest('/admin/submissions')
       ]);
 
+      console.log('📊 Pending users from API:', pending);
+      console.log('📊 All users from API:', users);
+
+      // FIX: Use isActive instead of isApproved
+      // Check if user has isActive field, if not treat as pending
+      const pendingFromUsers = users.filter(u => {
+        // If isActive is explicitly false, or if isActive doesn't exist and role is not admin
+        return u.isActive === false || (u.isActive === undefined && u.role !== 'admin');
+      });
+      
+      console.log('📊 Pending users from users list:', pendingFromUsers);
+
       setAdminOverview(overview);
       setAdminUsers(users);
-      setAdminPendingUsers(pending);
       setAdminTests(testsData);
       setAdminSubmissions(submissionsData);
+      
+      // Use pending from API if available, otherwise use filtered users
+      if (pending && pending.length > 0) {
+        setAdminPendingUsers(pending);
+      } else if (pendingFromUsers.length > 0) {
+        console.log('⚠️ Pending endpoint returned empty, using filtered users list');
+        setAdminPendingUsers(pendingFromUsers);
+      } else {
+        setAdminPendingUsers([]);
+      }
     } catch (error) {
       console.error('Admin data load failed:', error);
     }
@@ -331,7 +352,6 @@ export default function App() {
 
     updatedAnswers[answerIndex][field] = value;
 
-    // Update language template if language changes
     if (field === 'language' && currentQuestion.type === 'coding') {
       const newLanguage = value;
       updatedAnswers[answerIndex].codeAnswer = 
@@ -506,7 +526,7 @@ export default function App() {
   }, [testForm.questions]);
 
   // ==========================================
-  // ADMIN FUNCTIONS
+  // ADMIN FUNCTIONS - FIXED
   // ==========================================
   const deleteUser = useCallback(async (userId) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
@@ -514,6 +534,10 @@ export default function App() {
     try {
       await apiRequest(`/admin/users/${userId}`, { method: 'DELETE' });
       alert('User deleted.');
+      
+      setAdminUsers(prev => prev.filter(user => user._id !== userId));
+      setAdminPendingUsers(prev => prev.filter(user => user._id !== userId));
+      
       await loadAdminData();
     } catch (error) {
       alert('Error deleting user: ' + error.message);
@@ -545,14 +569,33 @@ export default function App() {
     }
   }, [adminUsers, apiRequest, loadAdminData]);
 
+  // FIXED: Approve user - uses isActive
   const approveUser = useCallback(async (userId) => {
     if (!confirm('Are you sure you want to approve this user?')) return;
 
     try {
-      await apiRequest(`/admin/approve-user/${userId}`, { method: 'PATCH' });
-      alert('User approved.');
+      console.log('📤 Approving user with ID:', userId);
+      
+      const response = await apiRequest(`/admin/approve-user/${userId}`, { 
+        method: 'PATCH'
+      });
+      
+      console.log('📥 Approve response:', response);
+      
+      alert('User approved successfully!');
+      
+      // Remove from pending list immediately
+      setAdminPendingUsers(prev => prev.filter(user => user._id !== userId));
+      
+      // Update the users list
+      setAdminUsers(prev => prev.map(user => 
+        user._id === userId ? { ...user, isActive: true } : user
+      ));
+      
+      // Reload data to ensure everything is in sync
       await loadAdminData();
     } catch (error) {
+      console.error('❌ Error approving user:', error);
       alert('Error approving user: ' + error.message);
     }
   }, [apiRequest, loadAdminData]);
@@ -577,7 +620,6 @@ export default function App() {
   // ==========================================
   // EFFECTS
   // ==========================================
-  // Initialize app - fetch user on mount
   useEffect(() => {
     const initializeApp = async () => {
       const userData = await fetchUser();
@@ -592,7 +634,6 @@ export default function App() {
     initializeApp();
   }, [fetchUser]);
 
-  // Load data based on user role and current view
   useEffect(() => {
     if (!user) return;
 
@@ -603,7 +644,6 @@ export default function App() {
     }
   }, [user, currentView, loadAdminData, loadDashboardData]);
 
-  // Test timer countdown
   useEffect(() => {
     if (currentView !== 'test-portal' || timeLeft <= 0) {
       if (timeLeft === 0 && currentView === 'test-portal' && activeTest) {
@@ -619,7 +659,6 @@ export default function App() {
     return () => clearInterval(timer);
   }, [timeLeft, currentView, activeTest, submitTest]);
 
-  // Auto-submit test on navigation away
   const setCurrentViewWithAutoSubmit = useCallback(async (view) => {
     if (activeTest && !isSubmittingTest && currentView === 'test-portal') {
       try {
@@ -680,7 +719,6 @@ export default function App() {
     <div>
       {renderHeader()}
 
-      {/* ===== AUTHENTICATION VIEW ===== */}
       {currentView === 'auth' && (
         <div className="auth-container">
           <div className="card auth-card animate-fade-in">
@@ -807,7 +845,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ===== ADMIN DASHBOARD ===== */}
       {currentView === 'admin-dashboard' && (
         <AdminDashboard
           adminOverview={adminOverview}
@@ -827,10 +864,10 @@ export default function App() {
           approveUser={approveUser}
           deleteTest={deleteTest}
           downloadAdminCsv={downloadAdminCsv}
+          CENTERS={CENTERS}
         />
       )}
 
-      {/* ===== STUDENT DASHBOARD ===== */}
       {currentView === 'student-dashboard' && (
         <StudentDashboard
           tests={tests}
@@ -840,7 +877,6 @@ export default function App() {
         />
       )}
 
-      {/* ===== TRAINER DASHBOARD ===== */}
       {currentView === 'trainer-dashboard' && (
         <TrainerDashboard
           tests={tests}
@@ -868,7 +904,6 @@ export default function App() {
         />
       )}
 
-      {/* ===== TEST PORTAL ===== */}
       {currentView === 'test-portal' && activeTest && (
         <TestPortal
           activeTest={activeTest}
@@ -883,7 +918,6 @@ export default function App() {
         />
       )}
 
-      {/* ===== SUBMISSION VIEW ===== */}
       {currentView === 'submission-view' && activeSubmission && (
         <SubmissionView
           activeSubmission={activeSubmission}
@@ -896,10 +930,8 @@ export default function App() {
 }
 
 // ==========================================
-// SUB-COMPONENTS
+// ADMIN DASHBOARD - UPDATED
 // ==========================================
-
-// ----- ADMIN DASHBOARD -----
 function AdminDashboard({
   adminOverview,
   adminUsers,
@@ -917,7 +949,8 @@ function AdminDashboard({
   editUser,
   approveUser,
   deleteTest,
-  downloadAdminCsv
+  downloadAdminCsv,
+  CENTERS
 }) {
   const filteredUsers = useMemo(() => {
     return adminUsers.filter(user => {
@@ -933,6 +966,11 @@ function AdminDashboard({
     );
   }, [adminSubmissions, adminFilterCenter]);
 
+  // Debug: Log pending users
+  useEffect(() => {
+    console.log('📊 AdminDashboard - Pending Users:', adminPendingUsers);
+  }, [adminPendingUsers]);
+
   return (
     <div className="container animate-fade-in">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -940,9 +978,11 @@ function AdminDashboard({
           <h1 style={{ fontSize: '2.2rem', marginBottom: '8px' }}>Admin Dashboard</h1>
           <p style={{ color: 'var(--text-muted)' }}>Platform-wide overview, center reports, and data exports.</p>
         </div>
-        <button className="btn btn-secondary" onClick={loadAdminData} style={{ padding: '8px 16px' }}>
-          🔄 Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-secondary" onClick={loadAdminData} style={{ padding: '8px 16px' }}>
+            🔄 Refresh
+          </button>
+        </div>
       </header>
 
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '2px solid var(--border)', paddingBottom: '0' }}>
@@ -964,6 +1004,18 @@ function AdminDashboard({
             }}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab === 'pending' && adminPendingUsers.length > 0 && (
+              <span style={{
+                background: '#ef4444',
+                color: 'white',
+                borderRadius: '50%',
+                padding: '0 6px',
+                fontSize: '0.7rem',
+                marginLeft: '4px'
+              }}>
+                {adminPendingUsers.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -1055,35 +1107,58 @@ function AdminDashboard({
                   <th style={{ padding: '12px' }}>Email</th>
                   <th style={{ padding: '12px' }}>Role</th>
                   <th style={{ padding: '12px' }}>Center</th>
+                  <th style={{ padding: '12px' }}>Status</th>
                   <th style={{ padding: '12px' }}>Registered</th>
                   <th style={{ padding: '12px' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map(u => (
-                  <tr key={u._id} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: '600' }}>{u.name}</td>
-                    <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{u.email}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <span style={{ 
-                        padding: '2px 10px', 
-                        borderRadius: '12px', 
-                        fontSize: '0.78rem', 
-                        fontWeight: '700',
-                        background: u.role === 'trainer' ? 'rgba(52,211,153,0.15)' : 'rgba(96,165,250,0.15)',
-                        color: u.role === 'trainer' ? '#34d399' : '#60a5fa'
-                      }}>
-                        {u.role.toUpperCase()}
-                      </span>
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>{u.center || '—'}</td>
-                    <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{new Date(u.createdAt).toLocaleDateString()}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <button className="btn btn-sm btn-primary" onClick={() => editUser(u._id)} style={{ marginRight: '4px' }}>Edit</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => deleteUser(u._id)}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredUsers.map(u => {
+                  // Check if user is active - default to false if field doesn't exist
+                  const isActive = u.isActive === true;
+                  return (
+                    <tr key={u._id} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: '600' }}>{u.name}</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{u.email}</td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{ 
+                          padding: '2px 10px', 
+                          borderRadius: '12px', 
+                          fontSize: '0.78rem', 
+                          fontWeight: '700',
+                          background: u.role === 'trainer' ? 'rgba(52,211,153,0.15)' : 'rgba(96,165,250,0.15)',
+                          color: u.role === 'trainer' ? '#34d399' : '#60a5fa'
+                        }}>
+                          {u.role.toUpperCase()}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>{u.center || '—'}</td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{ 
+                          padding: '2px 10px', 
+                          borderRadius: '12px', 
+                          fontSize: '0.7rem',
+                          fontWeight: '600',
+                          background: isActive ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                          color: isActive ? '#10b981' : '#ef4444'
+                        }}>
+                          {isActive ? '✅ Active' : '⏳ Pending'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                        {new Date(u.createdAt).toLocaleDateString()}
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <button className="btn btn-sm btn-primary" onClick={() => editUser(u._id)} style={{ marginRight: '4px' }}>
+                          Edit
+                        </button>
+                        <button className="btn btn-sm btn-danger" onClick={() => deleteUser(u._id)}>
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             {filteredUsers.length === 0 && (
@@ -1093,9 +1168,45 @@ function AdminDashboard({
         </div>
       )}
 
-      {/* Pending Users Tab */}
+      {/* Pending Tab - FIXED */}
       {adminTab === 'pending' && (
         <div>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: '16px' 
+          }}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <h3 style={{ fontSize: '1rem', margin: 0 }}>
+                Pending Approvals ({adminPendingUsers.length})
+              </h3>
+              <button 
+                className="btn btn-secondary" 
+                onClick={loadAdminData}
+                style={{ padding: '4px 12px', fontSize: '0.75rem' }}
+              >
+                🔄 Refresh
+              </button>
+            </div>
+            {adminPendingUsers.length > 0 && (
+              <button 
+                className="btn btn-primary"
+                style={{ padding: '4px 12px', fontSize: '0.75rem' }}
+                onClick={async () => {
+                  if (confirm('Approve all pending users?')) {
+                    for (const user of adminPendingUsers) {
+                      await approveUser(user._id);
+                    }
+                    await loadAdminData();
+                  }
+                }}
+              >
+                ✅ Approve All
+              </button>
+            )}
+          </div>
+          
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
@@ -1109,35 +1220,54 @@ function AdminDashboard({
                 </tr>
               </thead>
               <tbody>
-                {adminPendingUsers.map(u => (
-                  <tr key={u._id} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
-                    <td style={{ padding: '10px 12px', fontWeight: '600' }}>{u.name}</td>
-                    <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{u.email}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <span style={{ 
-                        padding: '2px 10px', 
-                        borderRadius: '12px', 
-                        fontSize: '0.78rem', 
-                        fontWeight: '700',
-                        background: u.role === 'trainer' ? 'rgba(52,211,153,0.15)' : 'rgba(96,165,250,0.15)',
-                        color: u.role === 'trainer' ? '#34d399' : '#60a5fa'
-                      }}>
-                        {u.role.toUpperCase()}
-                      </span>
-                    </td>
-                    <td style={{ padding: '10px 12px' }}>{u.center || '—'}</td>
-                    <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{new Date(u.createdAt).toLocaleDateString()}</td>
-                    <td style={{ padding: '10px 12px' }}>
-                      <button className="btn btn-sm btn-primary" onClick={() => approveUser(u._id)} style={{ marginRight: '4px' }}>Approve</button>
-                      <button className="btn btn-sm btn-danger" onClick={() => deleteUser(u._id)}>Delete</button>
+                {adminPendingUsers && adminPendingUsers.length > 0 ? (
+                  adminPendingUsers.map(u => (
+                    <tr key={u._id} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: '600' }}>{u.name}</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{u.email}</td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{ 
+                          padding: '2px 10px', 
+                          borderRadius: '12px', 
+                          fontSize: '0.78rem', 
+                          fontWeight: '700',
+                          background: u.role === 'trainer' ? 'rgba(52,211,153,0.15)' : 'rgba(96,165,250,0.15)',
+                          color: u.role === 'trainer' ? '#34d399' : '#60a5fa'
+                        }}>
+                          {u.role.toUpperCase()}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>{u.center || '—'}</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                        {new Date(u.createdAt).toLocaleDateString()}
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <button 
+                          className="btn btn-sm btn-primary" 
+                          onClick={() => approveUser(u._id)} 
+                          style={{ marginRight: '4px' }}
+                        >
+                          ✅ Approve
+                        </button>
+                        <button 
+                          className="btn btn-sm btn-danger" 
+                          onClick={() => deleteUser(u._id)}
+                        >
+                          🗑️ Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                      <div style={{ fontSize: '2rem', marginBottom: '8px' }}>✅</div>
+                      No pending users waiting for approval.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
-            {adminPendingUsers.length === 0 && (
-              <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>No pending users waiting for approval.</div>
-            )}
           </div>
         </div>
       )}
@@ -1241,7 +1371,9 @@ function AdminDashboard({
   );
 }
 
-// ----- STUDENT DASHBOARD -----
+// ==========================================
+// STUDENT DASHBOARD
+// ==========================================
 function StudentDashboard({ tests, submissions, startTest, openSubmissionDetails }) {
   return (
     <div className="container animate-fade-in">
@@ -1316,7 +1448,9 @@ function StudentDashboard({ tests, submissions, startTest, openSubmissionDetails
   );
 }
 
-// ----- TRAINER DASHBOARD -----
+// ==========================================
+// TRAINER DASHBOARD
+// ==========================================
 function TrainerDashboard({
   tests,
   studentsList,
@@ -1423,7 +1557,7 @@ function TrainerDashboard({
 }
 
 // ==========================================
-// TEST CREATION FORM WITH SEARCH & CENTER FILTER
+// TEST CREATION FORM
 // ==========================================
 function TestCreationForm({
   testForm,
@@ -1439,11 +1573,9 @@ function TestCreationForm({
   addTestCaseToQuestion,
   removeTestCaseFromQuestion
 }) {
-  // ========== FILTER STATE ==========
   const [searchTerm, setSearchTerm] = useState('');
   const [centerFilter, setCenterFilter] = useState('');
 
-  // ========== GET UNIQUE CENTERS ==========
   const uniqueCenters = useMemo(() => {
     const centers = studentsList
       .map(s => s.center)
@@ -1456,15 +1588,12 @@ function TestCreationForm({
     return ['All Centers', ...new Set(centers)];
   }, [studentsList]);
 
-  // ========== FILTER STUDENTS ==========
   const filteredStudents = useMemo(() => {
     return studentsList.filter(student => {
-      // Search by name or email
       const searchMatch = !searchTerm || 
         student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         student.email?.toLowerCase().includes(searchTerm.toLowerCase());
       
-      // Filter by center
       const studentCenter = student.center || 'No Center';
       const centerMatch = !centerFilter || centerFilter === 'All Centers' || 
         studentCenter === centerFilter;
@@ -1473,12 +1602,10 @@ function TestCreationForm({
     });
   }, [studentsList, searchTerm, centerFilter]);
 
-  // ========== SELECTION COUNTS ==========
   const selectedCount = testForm.assignedStudents.length;
   const totalStudents = studentsList.length;
   const filteredCount = filteredStudents.length;
 
-  // ========== GET CENTER DISPLAY NAME ==========
   const getCenterDisplay = (student) => {
     const center = student.center;
     if (!center || center.trim() === '') {
@@ -1529,9 +1656,7 @@ function TestCreationForm({
           />
         </div>
 
-        {/* ========================================== */}
-        {/* ASSIGN TO STUDENTS WITH SEARCH & FILTER */}
-        {/* ========================================== */}
+        {/* Assign to Students */}
         <div className="input-group">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <label className="input-label" style={{ margin: 0 }}>
@@ -1560,7 +1685,6 @@ function TestCreationForm({
             </div>
           </div>
 
-          {/* Search & Filter Controls */}
           <div style={{ 
             display: 'flex', 
             gap: '12px', 
@@ -1602,7 +1726,6 @@ function TestCreationForm({
             </div>
           </div>
 
-          {/* Student List */}
           {studentsList.length === 0 ? (
             <div style={{ 
               color: 'var(--text-muted)', 
@@ -1682,7 +1805,6 @@ function TestCreationForm({
                         {student.email}
                       </div>
                     </div>
-                    {/* Center Badge - Always show */}
                     <span style={{ 
                       fontSize: '0.65rem', 
                       padding: '2px 8px', 
@@ -1707,7 +1829,6 @@ function TestCreationForm({
             </div>
           )}
           
-          {/* Selection Summary */}
           <div style={{ 
             display: 'flex', 
             justifyContent: 'space-between', 
@@ -1743,7 +1864,6 @@ function TestCreationForm({
 
         <hr style={{ borderColor: 'var(--border)', margin: '20px 0' }} />
 
-        {/* Questions Section */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ fontSize: '1.25rem' }}>📝 Questions ({testForm.questions.length})</h3>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -1803,7 +1923,6 @@ function TestCreationForm({
               />
             </div>
 
-            {/* MCQ Choices */}
             {q.type === 'mcq' && (
               <div className="input-group">
                 <label className="input-label">Options (Exactly 4 options)</label>
@@ -1835,7 +1954,6 @@ function TestCreationForm({
               </div>
             )}
 
-            {/* Debugging Question Details */}
             {q.type === 'debugging' && (
               <>
                 <div className="input-group">
@@ -1868,7 +1986,6 @@ function TestCreationForm({
               </>
             )}
 
-            {/* Test Cases for Coding and Debugging questions */}
             {(q.type === 'debugging' || q.type === 'coding') && (
               <div className="input-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -1942,7 +2059,9 @@ function TestCreationForm({
   );
 }
 
-// ----- TEST SUBMISSIONS VIEW -----
+// ==========================================
+// TEST SUBMISSIONS VIEW
+// ==========================================
 function TestSubmissionsView({
   viewingTestSubmissions,
   selectedTestSubmissions,
@@ -1999,7 +2118,9 @@ function TestSubmissionsView({
   );
 }
 
-// ----- TEST PORTAL -----
+// ==========================================
+// TEST PORTAL
+// ==========================================
 function TestPortal({
   activeTest,
   studentAnswers,
@@ -2157,7 +2278,9 @@ function TestPortal({
   );
 }
 
-// ----- SUBMISSION VIEW -----
+// ==========================================
+// SUBMISSION VIEW
+// ==========================================
 function SubmissionView({ activeSubmission, user, setCurrentView }) {
   return (
     <div className="container animate-fade-in">
