@@ -210,7 +210,7 @@ export default function App() {
   };
 
   // ==========================================
-  // DATA LOADING FUNCTIONS - FIXED
+  // DATA LOADING FUNCTIONS
   // ==========================================
   const loadDashboardData = useCallback(async () => {
     if (!token || !user) return;
@@ -233,7 +233,6 @@ export default function App() {
     }
   }, [token, user, apiRequest]);
 
-  // FIXED: Using isActive instead of isApproved
   const loadAdminData = useCallback(async () => {
     if (!token) return;
 
@@ -251,10 +250,7 @@ export default function App() {
       console.log('📊 Pending users from API:', pending);
       console.log('📊 All users from API:', users);
 
-      // FIX: Use isActive instead of isApproved
-      // Check if user has isActive field, if not treat as pending
       const pendingFromUsers = users.filter(u => {
-        // If isActive is explicitly false, or if isActive doesn't exist and role is not admin
         return u.isActive === false || (u.isActive === undefined && u.role !== 'admin');
       });
       
@@ -265,7 +261,6 @@ export default function App() {
       setAdminTests(testsData);
       setAdminSubmissions(submissionsData);
       
-      // Use pending from API if available, otherwise use filtered users
       if (pending && pending.length > 0) {
         setAdminPendingUsers(pending);
       } else if (pendingFromUsers.length > 0) {
@@ -376,7 +371,7 @@ export default function App() {
   }, [apiRequest]);
 
   // ==========================================
-  // TEACHER FUNCTIONS
+  // TEACHER FUNCTIONS - FIXED
   // ==========================================
   const startCreateTest = useCallback(() => {
     setTestForm({
@@ -418,6 +413,7 @@ export default function App() {
     setIsCreatingTest(true);
   }, []);
 
+  // FIXED: Use /tests for both create and update
   const handleCreateTestSubmit = useCallback(async (event) => {
     event.preventDefault();
 
@@ -427,7 +423,7 @@ export default function App() {
     }
 
     const isEdit = !!editingTestId;
-    const endpoint = isEdit ? `/admin/tests/${editingTestId}` : '/tests';
+    const endpoint = isEdit ? `/tests/${editingTestId}` : '/tests';
     const method = isEdit ? 'PUT' : 'POST';
 
     try {
@@ -445,13 +441,14 @@ export default function App() {
     }
   }, [testForm, editingTestId, apiRequest, loadDashboardData]);
 
+  // FIXED: Use /tests for deletion
   const deleteTest = useCallback(async (testId) => {
     if (!confirm('Are you sure you want to delete this test? All student records will be lost.')) {
       return;
     }
 
     try {
-      await apiRequest(`/admin/tests/${testId}`, { method: 'DELETE' });
+      await apiRequest(`/tests/${testId}`, { method: 'DELETE' });
       alert('Test deleted.');
       await loadDashboardData();
     } catch (error) {
@@ -526,7 +523,7 @@ export default function App() {
   }, [testForm.questions]);
 
   // ==========================================
-  // ADMIN FUNCTIONS - FIXED
+  // ADMIN FUNCTIONS
   // ==========================================
   const deleteUser = useCallback(async (userId) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
@@ -569,7 +566,6 @@ export default function App() {
     }
   }, [adminUsers, apiRequest, loadAdminData]);
 
-  // FIXED: Approve user - uses isActive
   const approveUser = useCallback(async (userId) => {
     if (!confirm('Are you sure you want to approve this user?')) return;
 
@@ -584,15 +580,12 @@ export default function App() {
       
       alert('User approved successfully!');
       
-      // Remove from pending list immediately
       setAdminPendingUsers(prev => prev.filter(user => user._id !== userId));
       
-      // Update the users list
       setAdminUsers(prev => prev.map(user => 
         user._id === userId ? { ...user, isActive: true } : user
       ));
       
-      // Reload data to ensure everything is in sync
       await loadAdminData();
     } catch (error) {
       console.error('❌ Error approving user:', error);
@@ -930,7 +923,7 @@ export default function App() {
 }
 
 // ==========================================
-// ADMIN DASHBOARD - UPDATED
+// ADMIN DASHBOARD
 // ==========================================
 function AdminDashboard({
   adminOverview,
@@ -966,7 +959,6 @@ function AdminDashboard({
     );
   }, [adminSubmissions, adminFilterCenter]);
 
-  // Debug: Log pending users
   useEffect(() => {
     console.log('📊 AdminDashboard - Pending Users:', adminPendingUsers);
   }, [adminPendingUsers]);
@@ -1020,7 +1012,6 @@ function AdminDashboard({
         ))}
       </div>
 
-      {/* Overview Tab */}
       {adminTab === 'overview' && adminOverview && (
         <div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '32px' }}>
@@ -1063,7 +1054,6 @@ function AdminDashboard({
         </div>
       )}
 
-      {/* Users Tab */}
       {adminTab === 'users' && (
         <div>
           <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1114,7 +1104,6 @@ function AdminDashboard({
               </thead>
               <tbody>
                 {filteredUsers.map(u => {
-                  // Check if user is active - default to false if field doesn't exist
                   const isActive = u.isActive === true;
                   return (
                     <tr key={u._id} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
@@ -1168,7 +1157,6 @@ function AdminDashboard({
         </div>
       )}
 
-      {/* Pending Tab - FIXED */}
       {adminTab === 'pending' && (
         <div>
           <div style={{ 
@@ -1272,7 +1260,6 @@ function AdminDashboard({
         </div>
       )}
 
-      {/* Tests Tab */}
       {adminTab === 'tests' && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -1311,7 +1298,6 @@ function AdminDashboard({
         </div>
       )}
 
-      {/* Submissions Tab */}
       {adminTab === 'submissions' && (
         <div>
           <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1656,7 +1642,6 @@ function TestCreationForm({
           />
         </div>
 
-        {/* Assign to Students */}
         <div className="input-group">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <label className="input-label" style={{ margin: 0 }}>
