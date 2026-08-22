@@ -41,18 +41,23 @@ export default function CodeEditor({
     setIsRunning(true);
     setConsoleOutput("Compiling & Executing Code...");
     try {
-      const response = await fetch('/api/compiler/run', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          language,
-          sourceCode: value,
-          stdin
-        })
-      });
+      const API_BASE = import.meta.env.VITE_API_BASE;
+
+      const response = await fetch(
+        `${API_BASE}/api/compiler/run`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            language,
+            sourceCode: value,
+            stdin
+          })
+        }
+      );
 
       const data = await response.json();
       
