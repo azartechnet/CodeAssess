@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://azartechnet_db_user:admin@cluster0.musk1ed.mongodb.net/coding-test-platform";
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://azartechnet_db_user:admin@cluster0.musk1ed.mongodb.net/codingadmin";
 async function seed() {
   await mongoose.connect(MONGO_URI);
   const UserSchema = new mongoose.Schema({ name: String, email: { type: String, unique: true }, password: String, role: String, center: String }, { strict: false });
