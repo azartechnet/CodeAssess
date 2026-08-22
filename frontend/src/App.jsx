@@ -371,7 +371,7 @@ export default function App() {
   }, [apiRequest]);
 
   // ==========================================
-  // TEACHER FUNCTIONS - FIXED
+  // TEACHER FUNCTIONS
   // ==========================================
   const startCreateTest = useCallback(() => {
     setTestForm({
@@ -413,7 +413,6 @@ export default function App() {
     setIsCreatingTest(true);
   }, []);
 
-  // FIXED: Use /tests for both create and update
   const handleCreateTestSubmit = useCallback(async (event) => {
     event.preventDefault();
 
@@ -441,7 +440,6 @@ export default function App() {
     }
   }, [testForm, editingTestId, apiRequest, loadDashboardData]);
 
-  // FIXED: Use /tests for deletion
   const deleteTest = useCallback(async (testId) => {
     if (!confirm('Are you sure you want to delete this test? All student records will be lost.')) {
       return;
@@ -1543,7 +1541,7 @@ function TrainerDashboard({
 }
 
 // ==========================================
-// TEST CREATION FORM
+// TEST CREATION FORM - UPDATED WITH DURATION CONTROL
 // ==========================================
 function TestCreationForm({
   testForm,
@@ -1600,6 +1598,15 @@ function TestCreationForm({
     return center;
   };
 
+  // Handle duration change
+  const handleDurationChange = (value) => {
+    const duration = parseInt(value) || 1;
+    setTestForm(prev => ({ ...prev, duration }));
+  };
+
+  // Preset duration buttons
+  const durationPresets = [15, 30, 45, 60, 90, 120];
+
   return (
     <div className="card" style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -1642,6 +1649,93 @@ function TestCreationForm({
           />
         </div>
 
+        {/* ========================================== */}
+        {/* DURATION INPUT - UPDATED */}
+        {/* ========================================== */}
+        <div className="input-group">
+          <label className="input-label">
+            Duration (Minutes)
+            <span style={{ 
+              fontSize: '0.8rem', 
+              color: 'var(--text-muted)', 
+              marginLeft: '8px',
+              fontWeight: 'normal'
+            }}>
+              Current: {testForm.duration} minutes
+            </span>
+          </label>
+          
+          {/* Preset Buttons */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '8px', 
+            flexWrap: 'wrap',
+            marginBottom: '10px'
+          }}>
+            {durationPresets.map(preset => (
+              <button
+                key={preset}
+                type="button"
+                className={`btn ${testForm.duration === preset ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ 
+                  padding: '4px 12px', 
+                  fontSize: '0.8rem',
+                  minWidth: '45px'
+                }}
+                onClick={() => handleDurationChange(preset)}
+              >
+                {preset}m
+              </button>
+            ))}
+          </div>
+
+          {/* Custom Duration Input with Slider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <input
+              type="range"
+              min="1"
+              max="180"
+              step="1"
+              value={testForm.duration}
+              onChange={e => handleDurationChange(e.target.value)}
+              style={{ 
+                flex: 1,
+                accentColor: 'var(--accent)',
+                height: '6px',
+                borderRadius: '3px',
+                cursor: 'pointer'
+              }}
+            />
+            <input
+              type="number"
+              className="input-field"
+              style={{ 
+                width: '80px', 
+                textAlign: 'center',
+                padding: '6px 8px'
+              }}
+              min="1"
+              max="180"
+              value={testForm.duration}
+              onChange={e => handleDurationChange(e.target.value)}
+            />
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>min</span>
+          </div>
+          
+          {/* Duration Info */}
+          <div style={{ 
+            marginTop: '6px',
+            fontSize: '0.75rem',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            gap: '16px'
+          }}>
+            <span>⏱ {testForm.duration} minute{testForm.duration !== 1 ? 's' : ''}</span>
+            <span>📊 {Math.floor(testForm.duration / 60)}h {testForm.duration % 60}m</span>
+          </div>
+        </div>
+
+        {/* Assign to Students */}
         <div className="input-group">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <label className="input-label" style={{ margin: 0 }}>
