@@ -66,7 +66,7 @@ export default function App() {
 
   const fetchUser = async () => {
     try {
-      const res = await fetch('/api/auth/me', {
+      const res = await fetch('https://codeassess-backend-ltvf.onrender.com/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -94,7 +94,7 @@ export default function App() {
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
-    const endpoint = authTab === 'login' ? '/api/auth/login' : '/api/auth/register';
+    const endpoint = authTab === 'login' ? 'https://codeassess-backend-ltvf.onrender.com/api/auth/login' : 'https://codeassess-backend-ltvf.onrender.com/api/auth/register';
     const payload = authTab === 'login' 
       ? { email: authForm.email, password: authForm.password }
       : authForm;
@@ -171,7 +171,7 @@ export default function App() {
     if (!token) return;
     try {
       // Load Tests
-      const testsRes = await fetch('/api/tests', {
+      const testsRes = await fetch('https://codeassess-backend-ltvf.onrender.com/api/tests', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (testsRes.ok) {
@@ -181,7 +181,7 @@ export default function App() {
 
       // Load Submissions (students only)
       if (user && user.role === 'student') {
-        const subRes = await fetch('/api/submissions/my', {
+        const subRes = await fetch('https://codeassess-backend-ltvf.onrender.com/api/submissions/my', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (subRes.ok) {
@@ -192,7 +192,7 @@ export default function App() {
 
       // Load students list (trainers only, for assigning tests)
       if (user && user.role === 'trainer') {
-        const studRes = await fetch('/api/students', {
+        const studRes = await fetch('https://codeassess-backend-ltvf.onrender.com/api/students', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (studRes.ok) {
@@ -222,7 +222,7 @@ export default function App() {
   // ==========================================
   const startTest = async (testId) => {
     try {
-      const res = await fetch(`/api/tests/${testId}`, {
+      const res = await fetch(`https://codeassess-backend-ltvf.onrender.com/api/tests/${testId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const testData = await res.json();
@@ -277,7 +277,7 @@ export default function App() {
     if (isSubmittingTest) return;
     setIsSubmittingTest(true);
     try {
-      const res = await fetch('/api/submissions', {
+      const res = await fetch('https://codeassess-backend-ltvf.onrender.com/api/submissions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -475,7 +475,7 @@ export default function App() {
   // View student submissions on a specific test
   const viewSubmissions = async (testId) => {
     try {
-      const res = await fetch(`/api/submissions/test/${testId}`, {
+      const res = await fetch(`https://codeassess-backend-ltvf.onrender.com/api/submissions/test/${testId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -492,7 +492,7 @@ export default function App() {
   const deleteTest = async (testId) => {
     if (!confirm("Are you sure you want to delete this test? All student records for it will be lost.")) return;
     try {
-      const res = await fetch(`/api/admin/tests/${testId}`, {
+      const res = await fetch(`https://codeassess-backend-ltvf.onrender.com/api/admin/tests/${testId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -509,7 +509,7 @@ export default function App() {
 const deleteUser = async (userId) => {
   if (!confirm('Are you sure you want to delete this user?')) return;
   try {
-    const res = await fetch(`/api/admin/users/${userId}`, {
+    const res = await fetch(`https://codeassess-backend-ltvf.onrender.com/api/admin/users/${userId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -537,7 +537,7 @@ const editUser = async (userId) => {
   const newCenter = prompt('Enter new center', user.center || '');
   if (newName && newEmail) {
     try {
-      const res = await fetch(`/api/admin/users/${userId}`, {
+      const res = await fetch(`https://codeassess-backend-ltvf.onrender.com/api/admin/users/${userId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -561,7 +561,7 @@ const editUser = async (userId) => {
 const approveUser = async (userId) => {
   if (!confirm('Are you sure you want to approve this user?')) return;
   try {
-    const res = await fetch(`/api/admin/approve-user/${userId}`, {
+    const res = await fetch(`https://codeassess-backend-ltvf.onrender.com/api/admin/approve-user/${userId}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -579,7 +579,7 @@ const approveUser = async (userId) => {
 
   const openSubmissionDetails = async (subId) => {
     try {
-      const res = await fetch(`/api/submissions/${subId}`, {
+      const res = await fetch(`https://codeassess-backend-ltvf.onrender.com/api/submissions/${subId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await res.json();
@@ -1469,7 +1469,7 @@ const approveUser = async (userId) => {
                     onClick={e => {
                       // Attach token to request via fetch, then trigger download
                       e.preventDefault();
-                      fetch(`/api/tests/${viewingTestSubmissions._id}/submissions/csv`, {
+                      fetch(`https://codeassess-backend-ltvf.onrender.com/api/tests/${viewingTestSubmissions._id}/submissions/csv`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                       })
                         .then(res => res.blob())
