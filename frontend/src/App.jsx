@@ -137,11 +137,11 @@ export default function App() {
     if (!token) return;
     try {
       const [ovRes, usersRes, pendingRes, testsRes, subsRes] = await Promise.all([
-        fetch('/api/admin/overview', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/users', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/pending-users', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/tests', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/admin/submissions', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('https://codeassess-backend-ltvf.onrender.com/api/admin/overview', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('https://codeassess-backend-ltvf.onrender.com/api/admin/users', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('https://codeassess-backend-ltvf.onrender.com/api/admin/pending-users', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('https://codeassess-backend-ltvf.onrender.com/api/admin/tests', { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch('https://codeassess-backend-ltvf.onrender.com/api/admin/submissions', { headers: { 'Authorization': `Bearer ${token}` } }),
       ]);
       if (ovRes.ok) setAdminOverview(await ovRes.json());
       if (usersRes.ok) setAdminUsers(await usersRes.json());
