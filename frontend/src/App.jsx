@@ -343,6 +343,19 @@ export default function App() {
   }, [activeTest, activeQuestionIndex, studentAnswers]);
 
   // ==========================================
+  // SUBMISSION FUNCTIONS
+  // ==========================================
+  const openSubmissionDetails = useCallback(async (submissionId) => {
+    try {
+      const data = await apiRequest(`/submissions/${submissionId}`);
+      setActiveSubmission(data);
+      setCurrentView('submission-view');
+    } catch (error) {
+      alert('Could not load submission details: ' + error.message);
+    }
+  }, [apiRequest]);
+
+  // ==========================================
   // TEACHER FUNCTIONS
   // ==========================================
   const startCreateTest = useCallback(() => {
@@ -436,6 +449,61 @@ export default function App() {
       alert('Could not load submissions: ' + error.message);
     }
   }, [apiRequest, tests]);
+
+  // ==========================================
+  // QUESTION FORM FUNCTIONS
+  // ==========================================
+  const addQuestionToForm = useCallback((type) => {
+    const defaultQ = {
+      type,
+      title: '',
+      description: '',
+      points: 10,
+      options: type === 'mcq' ? ['', '', '', ''] : [],
+      correctOption: type === 'mcq' ? 0 : undefined,
+      buggyCode: type === 'debugging' ? '' : undefined,
+      language: type === 'debugging' ? 'javascript' : undefined,
+      languageTemplates: type === 'coding' ? { javascript: '', python: '', cpp: '', java: '' } : undefined,
+      testCases: (type === 'debugging' || type === 'coding') ? [{ input: '', output: '', isSample: true }] : []
+    };
+
+    setTestForm(prev => ({
+      ...prev,
+      questions: [...prev.questions, defaultQ]
+    }));
+  }, []);
+
+  const removeQuestionFromForm = useCallback((idx) => {
+    const list = [...testForm.questions];
+    list.splice(idx, 1);
+    setTestForm(prev => ({ ...prev, questions: list }));
+  }, [testForm.questions]);
+
+  const updateQuestionForm = useCallback((idx, field, value) => {
+    const list = [...testForm.questions];
+    list[idx][field] = value;
+    setTestForm(prev => ({ ...prev, questions: list }));
+  }, [testForm.questions]);
+
+  const updateQuestionTestCase = useCallback((qIdx, tcIdx, field, value) => {
+    const list = [...testForm.questions];
+    const tcList = [...list[qIdx].testCases];
+    tcList[tcIdx][field] = value;
+    list[qIdx].testCases = tcList;
+    setTestForm(prev => ({ ...prev, questions: list }));
+  }, [testForm.questions]);
+
+  const addTestCaseToQuestion = useCallback((qIdx) => {
+    const list = [...testForm.questions];
+    list[qIdx].testCases.push({ input: '', output: '', isSample: false });
+    setTestForm(prev => ({ ...prev, questions: list }));
+  }, [testForm.questions]);
+
+  const removeTestCaseFromQuestion = useCallback((qIdx, tcIdx) => {
+    const list = [...testForm.questions];
+    list[qIdx].testCases.splice(tcIdx, 1);
+    setTestForm(prev => ({ ...prev, questions: list }));
+  }, [testForm.questions]);
 
   // ==========================================
   // ADMIN FUNCTIONS
@@ -1978,4 +2046,3 @@ function SubmissionView({ activeSubmission, user, setCurrentView }) {
     </div>
   );
 }
-
