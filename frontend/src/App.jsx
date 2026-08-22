@@ -1422,7 +1422,9 @@ function TrainerDashboard({
   );
 }
 
-// ----- TEST CREATION FORM -----
+// ==========================================
+// TEST CREATION FORM WITH SEARCH & CENTER FILTER
+// ==========================================
 function TestCreationForm({
   testForm,
   setTestForm,
@@ -1437,6 +1439,54 @@ function TestCreationForm({
   addTestCaseToQuestion,
   removeTestCaseFromQuestion
 }) {
+  // ========== FILTER STATE ==========
+  const [searchTerm, setSearchTerm] = useState('');
+  const [centerFilter, setCenterFilter] = useState('');
+
+  // ========== GET UNIQUE CENTERS ==========
+  const uniqueCenters = useMemo(() => {
+    const centers = studentsList
+      .map(s => s.center)
+      .filter(center => center && center.trim() !== '');
+    
+    if (centers.length === 0) {
+      return ['All Centers', 'No Center'];
+    }
+    
+    return ['All Centers', ...new Set(centers)];
+  }, [studentsList]);
+
+  // ========== FILTER STUDENTS ==========
+  const filteredStudents = useMemo(() => {
+    return studentsList.filter(student => {
+      // Search by name or email
+      const searchMatch = !searchTerm || 
+        student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.email?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Filter by center
+      const studentCenter = student.center || 'No Center';
+      const centerMatch = !centerFilter || centerFilter === 'All Centers' || 
+        studentCenter === centerFilter;
+      
+      return searchMatch && centerMatch;
+    });
+  }, [studentsList, searchTerm, centerFilter]);
+
+  // ========== SELECTION COUNTS ==========
+  const selectedCount = testForm.assignedStudents.length;
+  const totalStudents = studentsList.length;
+  const filteredCount = filteredStudents.length;
+
+  // ========== GET CENTER DISPLAY NAME ==========
+  const getCenterDisplay = (student) => {
+    const center = student.center;
+    if (!center || center.trim() === '') {
+      return 'No Center';
+    }
+    return center;
+  };
+
   return (
     <div className="card" style={{ maxWidth: '900px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -1479,19 +1529,25 @@ function TestCreationForm({
           />
         </div>
 
+        {/* ========================================== */}
+        {/* ASSIGN TO STUDENTS WITH SEARCH & FILTER */}
+        {/* ========================================== */}
         <div className="input-group">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <label className="input-label" style={{ margin: 0 }}>
-              Assign to Students ({testForm.assignedStudents.length} selected)
+              👥 Assign to Students ({selectedCount} selected of {totalStudents} total)
             </label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
                 style={{ fontSize: '0.75rem', padding: '4px 10px' }}
-                onClick={() => setTestForm(prev => ({ ...prev, assignedStudents: studentsList.map(s => s._id) }))}
+                onClick={() => {
+                  const filteredIds = filteredStudents.map(s => s._id);
+                  setTestForm(prev => ({ ...prev, assignedStudents: filteredIds }));
+                }}
               >
-                Select All
+                Select All Filtered
               </button>
               <button
                 type="button"
@@ -1499,27 +1555,113 @@ function TestCreationForm({
                 style={{ fontSize: '0.75rem', padding: '4px 10px' }}
                 onClick={() => setTestForm(prev => ({ ...prev, assignedStudents: [] }))}
               >
-                Clear
+                Clear All
               </button>
             </div>
           </div>
+
+          {/* Search & Filter Controls */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '12px', 
+            marginBottom: '12px',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="🔍 Search by name or email..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                style={{ padding: '8px 12px', fontSize: '0.9rem' }}
+              />
+            </div>
+            <div style={{ minWidth: '150px' }}>
+              <select
+                className="input-field"
+                value={centerFilter}
+                onChange={e => setCenterFilter(e.target.value)}
+                style={{ padding: '8px 12px', fontSize: '0.9rem', cursor: 'pointer' }}
+              >
+                {uniqueCenters.map(center => (
+                  <option key={center} value={center}>
+                    {center === 'All Centers' ? '🏢 All Centers' : `🏢 ${center}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              fontSize: '0.85rem', 
+              color: 'var(--text-muted)',
+              padding: '4px 8px'
+            }}>
+              {filteredCount} student{filteredCount !== 1 ? 's' : ''} found
+            </div>
+          </div>
+
+          {/* Student List */}
           {studentsList.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+            <div style={{ 
+              color: 'var(--text-muted)', 
+              fontSize: '0.85rem', 
+              padding: '12px', 
+              background: 'rgba(0,0,0,0.2)', 
+              borderRadius: '8px', 
+              border: '1px solid var(--border)' 
+            }}>
               No students registered yet.
             </div>
+          ) : filteredStudents.length === 0 ? (
+            <div style={{ 
+              color: 'var(--text-muted)', 
+              fontSize: '0.85rem', 
+              padding: '12px', 
+              background: 'rgba(0,0,0,0.2)', 
+              borderRadius: '8px', 
+              border: '1px solid var(--border)' 
+            }}>
+              No students match your search/filter criteria.
+            </div>
           ) : (
-            <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid var(--border)', padding: '8px' }}>
-              {studentsList.map(student => {
+            <div style={{ 
+              maxHeight: '250px', 
+              overflowY: 'auto', 
+              background: 'rgba(0,0,0,0.2)', 
+              borderRadius: '8px', 
+              border: '1px solid var(--border)', 
+              padding: '8px' 
+            }}>
+              {filteredStudents.map(student => {
                 const isChecked = testForm.assignedStudents.includes(student._id);
+                const centerDisplay = getCenterDisplay(student);
+                
                 return (
                   <label
                     key={student._id}
-                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 8px', borderRadius: '6px', cursor: 'pointer', transition: 'background 0.15s', background: isChecked ? 'rgba(99,102,241,0.15)' : 'transparent' }}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '10px', 
+                      padding: '6px 8px', 
+                      borderRadius: '6px', 
+                      cursor: 'pointer', 
+                      transition: 'background 0.15s', 
+                      background: isChecked ? 'rgba(99,102,241,0.15)' : 'transparent'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = isChecked ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = isChecked ? 'rgba(99,102,241,0.15)' : 'transparent';
+                    }}
                   >
                     <input
                       type="checkbox"
                       checked={isChecked}
-                      style={{ accentColor: 'var(--accent)', width: '15px', height: '15px' }}
+                      style={{ accentColor: 'var(--accent)', width: '16px', height: '16px', flexShrink: 0 }}
                       onChange={() => {
                         setTestForm(prev => {
                           const already = prev.assignedStudents.includes(student._id);
@@ -1532,27 +1674,86 @@ function TestCreationForm({
                         });
                       }}
                     />
-                    <span style={{ fontSize: '0.9rem' }}>{student.name}</span>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>{student.email}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: isChecked ? '600' : '400' }}>
+                        {student.name}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', wordBreak: 'break-all' }}>
+                        {student.email}
+                      </div>
+                    </div>
+                    {/* Center Badge - Always show */}
+                    <span style={{ 
+                      fontSize: '0.65rem', 
+                      padding: '2px 8px', 
+                      borderRadius: '12px',
+                      background: centerDisplay === 'No Center' 
+                        ? 'rgba(255, 255, 255, 0.05)' 
+                        : 'rgba(99,102,241,0.1)',
+                      color: centerDisplay === 'No Center' 
+                        ? 'var(--text-muted)' 
+                        : 'var(--accent-light)',
+                      border: centerDisplay === 'No Center'
+                        ? '1px solid rgba(255,255,255,0.1)'
+                        : '1px solid rgba(99,102,241,0.2)',
+                      flexShrink: 0,
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {centerDisplay}
+                    </span>
                   </label>
                 );
               })}
             </div>
           )}
+          
+          {/* Selection Summary */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginTop: '8px',
+            padding: '8px 4px',
+            fontSize: '0.8rem',
+            color: 'var(--text-muted)',
+            borderTop: '1px solid var(--border)'
+          }}>
+            <span>
+              {selectedCount} student{selectedCount !== 1 ? 's' : ''} selected
+              {(searchTerm || centerFilter) && ` (filtered from ${totalStudents} total)`}
+            </span>
+            {selectedCount > 0 && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ fontSize: '0.7rem', padding: '2px 8px' }}
+                onClick={() => {
+                  const names = studentsList
+                    .filter(s => testForm.assignedStudents.includes(s._id))
+                    .map(s => `• ${s.name} (${s.center || 'No Center'})`)
+                    .join('\n');
+                  alert(`Selected Students (${testForm.assignedStudents.length}):\n\n${names}`);
+                }}
+              >
+                View Selected
+              </button>
+            )}
+          </div>
         </div>
 
         <hr style={{ borderColor: 'var(--border)', margin: '20px 0' }} />
 
+        {/* Questions Section */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: '1.25rem' }}>Questions ({testForm.questions.length})</h3>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <h3 style={{ fontSize: '1.25rem' }}>📝 Questions ({testForm.questions.length})</h3>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {QUESTION_TYPES.map(type => (
               <button 
                 key={type}
                 type="button" 
                 className="btn btn-secondary" 
                 onClick={() => addQuestionToForm(type)} 
-                style={{ fontSize: '0.8rem', padding: '6px 12px' }}
+                style={{ fontSize: '0.75rem', padding: '6px 12px' }}
               >
                 + {type.toUpperCase()}
               </button>
@@ -1733,7 +1934,7 @@ function TestCreationForm({
             Cancel
           </button>
           <button type="submit" className="btn btn-primary">
-            Save Assessment
+            💾 Save Assessment
           </button>
         </div>
       </form>
